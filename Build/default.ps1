@@ -7,6 +7,10 @@
 	$outputDirectory = "$solutionDirectory\.build"
 	$temporaryOutputDirectory = "$outputDirectory\temp"
 
+	$publishedNUnitTestsDirectory = "$temporaryOutputDirectory\_PublishedNUnitTests"
+	$testResultsDirectory = "$outputDirectory\TestResults"
+	$NUnitTestResultsDirectory = "$testResultsDirectory\NUnit"
+
 	$buildConfiguration = "Release"
 	$buildPlatform = "Any CPU"
 }
@@ -52,7 +56,16 @@ task Compile -depends Init `
 	}
 }
 
-task Test -depends Compile, Clean `
+
+
+task TestNUnit -depends Compile `
+			   -description 'Run NUnit tests'
+
+task TestMSUnit -depends Compile `
+			    -description 'Run MSUnit tests'
+
+
+task Test -depends Compile, TestNUnit, TestMSUnit `
 		  -description 'Run unit tests' {
 	Write-Host $testMessage
 }
