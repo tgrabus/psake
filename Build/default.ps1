@@ -1,4 +1,6 @@
-﻿properties {
+﻿Include ".\helpers.ps1"
+
+properties {
 	$testMessage = 'Executed Test!'
 	$compileMessage = 'Executed Compile!'
 	$cleanMessage = 'Executed Clean!'
@@ -11,8 +13,13 @@
 	$testResultsDirectory = "$outputDirectory\TestResults"
 	$NUnitTestResultsDirectory = "$testResultsDirectory\NUnit"
 
+	$packagesPath = "$solutionDirectory\packages"
+	$NUnitExe = (Find-PackagePath $packagesPath "NUnit.Console") + "\tools\nunit3-console.exe"
+
 	$buildConfiguration = "Release"
 	$buildPlatform = "Any CPU"
+	
+
 }
 
 FormatTaskName "`r`n`r`n--------- Executing {0} Task ----------"
@@ -27,6 +34,12 @@ task Init -description 'Init thee build by removing previous artifacts and creat
 
 	Assert -conditionToCheck ("x86", "x64", "Any CPU" -contains $buildPlatform) `
 		   -failureMessage "Invalid build platform '$buildPlatform'. Valid values are 'x86' or 'x64' or 'Any CPU'."
+
+	#Check if all tools are available
+	Write-Host "Check if all required tools are available"
+
+	Assert -conditionToCheck (Test-Path $NUnitExe) `
+		   -failureMessage "NUnit console could not be found at $NUnitExe"
 
 	#Removing previous build results
 	if(Test-Path $outputDirectory) {
@@ -52,17 +65,49 @@ task Compile -depends Init `
 	Write-Host "Building solution $SolutionFile"
 
 	Exec {
-		msbuild $SolutionFile "/p:Configuration=$buildConfiguration;Platform=$buildPlatform;OutDir=$temporaryOutputDirectory"
+		msbuild $SolutionFile "/p:Configuration=$buildConfiguration;Platform=$buildPlatform;OutDir=$temporaryOutputDirectory" | Out-Null
 	}
 }
 
 
 
 task TestNUnit -depends Compile `
-			   -description 'Run NUnit tests'
+			   -description 'Run NUnit tests' `
+			   -precondition { return Test-Path  $publishedNUnitTestsDirectory } `
+{
+	$projects = Get-ChildItem $publishedNUnitTestsDirectory
+
+	if($projects.Count -eq 1) 
+	{
+		Write-Host "1 NUnit project was found: "
+	}
+	else 
+	{
+		Write-Host "NUnit projects were found: "
+	}
+
+	Write-Host ($projects | select $_.Name)
+
+	if(!(Test-Path $NUnitTestResultsDirectory))
+	{
+		Write-Host "Create NUnit test result directory located at $NUnitTestResultsDirectory"
+		mkdir $NUnitTestResultsDirectory | Out-Null
+	}
+
+	$testAssemblies = $projects | ForEach-Object { 
+		$_.FullName + "\bin\" + $_.Name + ".dll"
+	}
+	$testAssembliesParameter = [string]::Join(" ", $testAssemblies)
+	Write-Host "Test assemblies: $testAssembliesParameter"
+	Exec { &$NUnitExe $testAssembliesParameter /result:$NUnitTestResultsDirectory\NUnit.xml }
+
+}
 
 task TestMSUnit -depends Compile `
-			    -description 'Run MSUnit tests'
+			    -description 'Run MSUnit tests' 
+{
+
+}
 
 
 task Test -depends Compile, TestNUnit, TestMSUnit `
