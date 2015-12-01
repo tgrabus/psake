@@ -47,7 +47,7 @@ function Prepare-Tests
 
 	#Get the list of test DLLs
 	$testAssembliesPath = $projects | ForEach-Object { 
-		"`"`"" + $_.FullName + "\bin\" + $_.Name + ".dll`"`""
+		$_.FullName + "\bin\" + $_.Name + ".dll"
 	}
 
 	$testAssemblies = [string]::Join(" ", $testAssembliesPath)
@@ -74,6 +74,7 @@ function Run-Tests
 						  -targetargs:$targetArgs `
 						  -output:$coveragePath `
 						  -register:user `
+						  -filter:$filter `
 						  -excludebyattribute:$excludeByAttribute `
 						  -excludebyfile:$excludeByFile `
 						  -skipautoprops `

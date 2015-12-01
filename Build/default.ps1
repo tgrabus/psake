@@ -95,7 +95,7 @@ task TestNUnit -depends Compile `
 
 	Write-Host "Test assemblies: $testAssemblies"
 
-	$targetArgs = "$testAssemblies /result:`"`"$NUnitTestResultsDirectory\NUnit.xml`"`""
+	$targetArgs = "$testAssemblies /result:$NUnitTestResultsDirectory\NUnit.xml"
 
 	Run-Tests -openCoverExe:$OpenCoverExe `
 			  -targetExe:$NUnitExe `
