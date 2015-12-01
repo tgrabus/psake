@@ -127,12 +127,12 @@ task Test -depends Compile, TestNUnit `
 		#Write class coverage
 		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsCCovered' value='$($coverageSummary.visitedClasses)']"
 		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsCTotal' value='$($coverageSummary.numClasses)']"
-		Write-Host ("##teamcity[buildStatisticValue key='CodeCoverageC' value='{0:N2}']" -f(($coverageSummary.visitedClasses / $coverageSummary.numClasses) * 100))
+		Write-Host ("##teamcity[buildStatisticValue key='CodeCoverageC' value='{0:N0}']" -f(($coverageSummary.visitedClasses / $coverageSummary.numClasses) * 100))
 
 		#Write method coverage
 		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsMCovered' value='$($coverageSummary.visitedMethods)']"
 		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsMTotal' value='$($coverageSummary.numMethods)']"
-		Write-Host ("##teamcity[buildStatisticValue key='CodeCoverageM' value='{0:N2}']" -f(($coverageSummary.visitedMethods / $coverageSummary.numMethods) * 100))
+		Write-Host ("##teamcity[buildStatisticValue key='CodeCoverageM' value='{0:N0}']" -f(($coverageSummary.visitedMethods / $coverageSummary.numMethods) * 100))
 
 		#Write branch coverage
 		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsBCovered' value='$($coverageSummary.visitedBranchPoints)']"
