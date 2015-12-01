@@ -12,9 +12,16 @@ properties {
 	$publishedNUnitTestsDirectory = "$temporaryOutputDirectory\_PublishedNUnitTests"
 	$testResultsDirectory = "$outputDirectory\TestResults"
 	$NUnitTestResultsDirectory = "$testResultsDirectory\NUnit"
+	$testCoverageDirectory = "$outputDirectory\TestCoverage"
+	$testCoverageReportPath = "$testCoverageDirectory\OpenCover.xml"
+	$testCoverageFilter = "+[*]* -[*.NUnitTests]* -[*.Tests]*"
+	$testCoverageExcludeByAttribute = "System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute"
+	$testCoverageExcludeByFile = "*\*Designer.cs;*\*.g.cs;*\*.g.i.cs"
 
 	$packagesPath = "$solutionDirectory\packages"
 	$NUnitExe = (Find-PackagePath $packagesPath "NUnit.Console") + "\tools\nunit3-console.exe"
+	$OpenCoverExe = (Find-PackagePath $packagesPath "OpenCover") + "\tools\OpenCover.Console.exe"
+	$ReportGeneratorExe = (Find-PackagePath $packagesPath "ReportGenerator") + "\tools\ReportGenerator.exe"
 
 	$buildConfiguration = "Release"
 	$buildPlatform = "Any CPU"
@@ -39,7 +46,13 @@ task Init -description 'Init thee build by removing previous artifacts and creat
 	Write-Host "Check if all required tools are available"
 
 	Assert -conditionToCheck (Test-Path $NUnitExe) `
-		   -failureMessage "NUnit console could not be found at $NUnitExe"
+		   -failureMessage "NUnit Console could not be found at $NUnitExe"
+
+	Assert -conditionToCheck (Test-Path $OpenCoverExe) `
+		   -failureMessage "OpenCover Console could not be found at $OpenCoverExe"
+
+	Assert -conditionToCheck (Test-Path $ReportGeneratorExe) `
+		   -failureMessage "ReportGenerator Console could not be found at $ReportGeneratorExe"
 
 	#Removing previous build results
 	if(Test-Path $outputDirectory) {
@@ -75,42 +88,65 @@ task TestNUnit -depends Compile `
 			   -description 'Run NUnit tests' `
 			   -precondition { return Test-Path  $publishedNUnitTestsDirectory } `
 {
-	$projects = Get-ChildItem $publishedNUnitTestsDirectory
+	$testAssemblies = Prepare-Tests -testRunnerName:"NUnit" `
+									-publishedTestDirectory:$publishedNUnitTestsDirectory `
+									-testResultsDirectory:$NUnitTestResultsDirectory `
+									-testCoverageDirectory:$testCoverageDirectory
 
-	if($projects.Count -eq 1) 
-	{
-		Write-Host "1 NUnit project was found: "
-	}
-	else 
-	{
-		Write-Host "NUnit projects were found: "
-	}
+	Write-Host "Test assemblies: $testAssemblies"
 
-	Write-Host ($projects | select $_.Name)
+	$targetArgs = "$testAssemblies /result:`"`"$NUnitTestResultsDirectory\NUnit.xml`"`""
 
-	if(!(Test-Path $NUnitTestResultsDirectory))
-	{
-		Write-Host "Create NUnit test result directory located at $NUnitTestResultsDirectory"
-		mkdir $NUnitTestResultsDirectory | Out-Null
-	}
-
-	$testAssemblies = $projects | ForEach-Object { 
-		$_.FullName + "\bin\" + $_.Name + ".dll"
-	}
-	$testAssembliesParameter = [string]::Join(" ", $testAssemblies)
-	Write-Host "Test assemblies: $testAssembliesParameter"
-	Exec { &$NUnitExe $testAssembliesParameter /result:$NUnitTestResultsDirectory\NUnit.xml }
+	Run-Tests -openCoverExe:$OpenCoverExe `
+			  -targetExe:$NUnitExe `
+			  -targetArgs:$targetArgs `
+			  -coveragePath:$testCoverageReportPath `
+			  -filter:$testCoverageFilter `
+			  -excludeByAttribute:$testCoverageExcludeByAttribute `
+			  -excludeByFile:$testCoverageExcludeByFile
 
 }
 
-task TestMSUnit -depends Compile `
-			    -description 'Run MSUnit tests' 
+task Test -depends Compile, TestNUnit `
+		  -description 'Run unit tests' `
 {
 
-}
+	if(Test-Path $testCoverageReportPath) 
+	{
+		#Generate HTML test coverage report
+		Write-Host "`r`nGenerating HTML test coverage report"
 
+		Exec { &$ReportGeneratorExe $testCoverageReportPath $testCoverageDirectory }
 
-task Test -depends Compile, TestNUnit, TestMSUnit `
-		  -description 'Run unit tests' {
-	Write-Host $testMessage
+		#Parse OpenCover report
+		Write-Host "Parsing OpenCover report"
+
+		$coverage = [xml](Get-Content -Path $testCoverageReportPath)
+		$coverageSummary = $coverage.CoverageSession.Summary
+
+		#Write class coverage
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsCCovered' value='$($coverageSummary.visitedClasses)']"
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsCTotal' value='$($coverageSummary.numClasses)']"
+		Write-Host ("##teamcity[buildStatisticValue key='CodeCoverageC' value='{0:N2}']" -f(($coverageSummary.visitedClasses / $coverageSummary.numClasses) * 100))
+
+		#Write method coverage
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsMCovered' value='$($coverageSummary.visitedMethods)']"
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsMTotal' value='$($coverageSummary.numMethods)']"
+		Write-Host ("##teamcity[buildStatisticValue key='CodeCoverageM' value='{0:N2}']" -f(($coverageSummary.visitedMethods / $coverageSummary.numMethods) * 100))
+
+		#Write branch coverage
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsBCovered' value='$($coverageSummary.visitedBranchPoints)']"
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsBTotal' value='$($coverageSummary.numBranchPoints)']"
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageB' value='$($coverageSummary.branchCoverage)']"
+
+		#Write sequence point coverage
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsSCovered' value='$($coverageSummary.visitedSequencePoints)']"
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageAbsSTotal' value='$($coverageSummary.numSequencePoints)']"
+		Write-Host "##teamcity[buildStatisticValue key='CodeCoverageS' value='$($coverageSummary.sequenceCoverage)']"
+	}
+	else
+	{
+		Write-Host "No coverage file was found: $testCoverageReportPath"
+	}
+
 }
