@@ -73,7 +73,7 @@ function Run-Tests
 	Exec { &$openCoverExe -target:$targetExe `
 						  -targetargs:$targetArgs `
 						  -output:$coveragePath `
-						  -register:user `
+						  -register `
 						  -filter:$filter `
 						  -excludebyattribute:$excludeByAttribute `
 						  -excludebyfile:$excludeByFile `
