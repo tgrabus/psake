@@ -1,0 +1,15 @@
+﻿<?xml version="1.0"?>
+<package>
+  <metadata>
+    <id>ConsoleApplication1</id>
+    <version>1.0.[buildNumber]</version>
+    <title>ConsoleApplication1</title>
+    <authors>TG</authors>
+    <owners>TG</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Console application</description>
+    <releaseNotes>[release notes]</releaseNotes>
+    <copyright>TG Copyright</copyright>
+    <tags></tags>
+  </metadata>
+</package>

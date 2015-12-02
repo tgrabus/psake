@@ -1,32 +1,42 @@
 ﻿Include ".\helpers.ps1"
 
 properties {
-	$testMessage = 'Executed Test!'
-	$compileMessage = 'Executed Compile!'
-	$cleanMessage = 'Executed Clean!'
 
 	$solutionDirectory = (Get-Item $SolutionFile).DirectoryName
 	$outputDirectory = "$solutionDirectory\.build"
+	
+	#Project's output directories
 	$temporaryOutputDirectory = "$outputDirectory\temp"
-
 	$publishedNUnitTestsDirectory = "$temporaryOutputDirectory\_PublishedNUnitTests"
+	$publishedApplicationsDirectory = "$temporaryOutputDirectory\_PublishedApplications"
+	$publishedWebsitesDirectory = "$temporaryOutputDirectory\_PublishedWebsites"
+
+	$packagesOutputDirectory = "$outputDirectory\Packages"
+	$applicationsOutputDirectory = "$packagesOutputDirectory\Applications"
+
+	#Test results directories
 	$testResultsDirectory = "$outputDirectory\TestResults"
 	$NUnitTestResultsDirectory = "$testResultsDirectory\NUnit"
+	
+	#Test coverage directory and default configuration
 	$testCoverageDirectory = "$outputDirectory\TestCoverage"
 	$testCoverageReportPath = "$testCoverageDirectory\OpenCover.xml"
 	$testCoverageFilter = "+[*]* -[*.NUnitTests]* -[*.Tests]*"
 	$testCoverageExcludeByAttribute = "System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute"
 	$testCoverageExcludeByFile = "*\*Designer.cs;*\*.g.cs;*\*.g.i.cs"
 
+	#Tools
 	$packagesPath = "$solutionDirectory\packages"
 	$NUnitExe = (Find-PackagePath $packagesPath "NUnit.Console") + "\tools\nunit3-console.exe"
 	$OpenCoverExe = (Find-PackagePath $packagesPath "OpenCover") + "\tools\OpenCover.Console.exe"
 	$ReportGeneratorExe = (Find-PackagePath $packagesPath "ReportGenerator") + "\tools\ReportGenerator.exe"
+	$7ZipExe = (Find-PackagePath $packagesPath "7-Zip.CommandLine") + "\tools\7za.exe"
+	$NugetExe = (Find-PackagePath $packagesPath "NuGet.CommandLine") + "\tools\NuGet.exe"
 
+
+	#MSBuild default configuration
 	$buildConfiguration = "Release"
 	$buildPlatform = "Any CPU"
-	
-
 }
 
 FormatTaskName "`r`n`r`n--------- Executing {0} Task ----------"
@@ -46,13 +56,19 @@ task Init -description 'Init thee build by removing previous artifacts and creat
 	Write-Host "Check if all required tools are available"
 
 	Assert -conditionToCheck (Test-Path $NUnitExe) `
-		   -failureMessage "NUnit Console could not be found at $NUnitExe"
+		   -failureMessage "NUnit Exe could not be found at $NUnitExe"
 
 	Assert -conditionToCheck (Test-Path $OpenCoverExe) `
-		   -failureMessage "OpenCover Console could not be found at $OpenCoverExe"
+		   -failureMessage "OpenCover Exe could not be found at $OpenCoverExe"
 
 	Assert -conditionToCheck (Test-Path $ReportGeneratorExe) `
-		   -failureMessage "ReportGenerator Console could not be found at $ReportGeneratorExe"
+		   -failureMessage "ReportGenerator Exe could not be found at $ReportGeneratorExe"
+
+	Assert -conditionToCheck (Test-Path $7ZipExe) `
+		   -failureMessage "7-Zip Exe could not be found at $7ZipExe"
+
+	Assert -conditionToCheck (Test-Path $NugetExe) `
+		   -failureMessage "NuGet Exe could not be found at $NugetExe"
 
 	#Removing previous build results
 	if(Test-Path $outputDirectory) {
@@ -68,10 +84,6 @@ task Init -description 'Init thee build by removing previous artifacts and creat
 	New-Item $temporaryOutputDirectory -ItemType Directory | Out-Null
 }
 
-task Clean -description 'Remove temporary files' {
-	Write-Host $cleanMessage
-}
-
 task Compile -depends Init `
 			 -description 'Compile the code' `
 			 -requiredVariables SolutionFile, buildConfiguration, buildPlatform, temporaryOutputDirectory {
@@ -81,8 +93,6 @@ task Compile -depends Init `
 		msbuild $SolutionFile "/p:Configuration=$buildConfiguration;Platform=$buildPlatform;OutDir=$temporaryOutputDirectory" | Out-Null
 	}
 }
-
-
 
 task TestNUnit -depends Compile `
 			   -description 'Run NUnit tests' `
@@ -149,4 +159,59 @@ task Test -depends Compile, TestNUnit `
 		Write-Host "No coverage file was found: $testCoverageReportPath"
 	}
 
+}
+
+task Package -depends Compile, Test `
+			 -description 'Package applications' `
+			 -requiredVariables publishedWebsitesDirectory, publishedApplicationsDirectory, applicationsOutputDirectory `
+{
+	$applications = @(Get-ChildItem $publishedWebsitesDirectory) + @(Get-ChildItem $publishedApplicationsDirectory)
+
+	if($applications.Length -gt 0 -and !(Test-Path $applicationsOutputDirectory))
+	{
+		New-Item $applicationsOutputDirectory -ItemType Directory | Out-Null
+	}
+
+	foreach($application in $applications) 
+	{
+		$nuspecPath = "$($application.FullName)\bin\$($application.Name).nuspec"
+		Write-Host "nuspec file: $nuspecPath"
+
+		if(Test-Path $nuspecPath)
+		{
+			Write-Host "Packaging $($application.Name) as a NuGet package"
+
+			#Parse nuspec file
+			$nuspec = [xml](Get-Content -Path $nuspecPath)
+			$metadata = $nuspec.package.metadata
+
+			#Update package version
+			$metadata.version = $metadata.version.Replace("[buildNumber]", $BuildNumber)
+			if(!$IsMainBranch) 
+			{
+				$metadata.version = $metadata.version + "-$BranchName"
+			}
+
+			#Update package release notes
+			$metadata.releaseNotes = "Build Number: $BuildNumber`r`nBranch Name: $BranchName`r`nGit Commit Hash: $GitCommitHash"
+
+			$nuspec.Save((Get-Item $nuspecPath))
+
+			Exec { &$NugetExe pack $nuspecPath -OutputDirectory $applicationsOutputDirectory }
+		}
+		else
+		{
+			Write-Host "`r`nPackaging $($application.Name) as a zip file"
+
+			$archivePath = "$applicationsOutputDirectory\$($application.Name).zip"
+			$inputDirectory = "$($application.FullName)\*"
+
+			Exec { &$7ZipExe a -r -mx3 $archivePath $inputDirectory }
+		}
+	}
+}
+
+
+task Clean -description 'Remove temporary files' {
+	Write-Host "Cleaned!"
 }

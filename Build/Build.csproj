@@ -66,6 +66,7 @@
     <None Include="default.ps1" />
     <None Include="helpers.ps1" />
     <None Include="MSBuild\MSUnitBuild.targets" />
+    <None Include="MSBuild\ApplicationBuild.targets" />
     <None Include="MSBuild\NUnitBuild.targets" />
     <None Include="packages.config" />
   </ItemGroup>
