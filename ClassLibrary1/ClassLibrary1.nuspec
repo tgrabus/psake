@@ -1,0 +1,15 @@
+﻿<?xml version="1.0"?>
+<package>
+  <metadata>
+    <id>$id$</id>
+    <version>$version$</version>
+    <title>ClassLibrary1</title>
+    <authors>$author$</authors>
+    <owners>TG</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Library</description>
+    <releaseNotes>[release notes]</releaseNotes>
+    <copyright>TG Copyright</copyright>
+    <tags></tags>
+  </metadata>
+</package>

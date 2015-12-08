@@ -10,9 +10,11 @@ properties {
 	$publishedNUnitTestsDirectory = "$temporaryOutputDirectory\_PublishedNUnitTests"
 	$publishedApplicationsDirectory = "$temporaryOutputDirectory\_PublishedApplications"
 	$publishedWebsitesDirectory = "$temporaryOutputDirectory\_PublishedWebsites"
+	$publishedLibrariesDirectory = "$temporaryOutputDirectory\_PublishedLibraries"
 
 	$packagesOutputDirectory = "$outputDirectory\Packages"
 	$applicationsOutputDirectory = "$packagesOutputDirectory\Applications"
+	$librariesOutputDirectory = "$packagesOutputDirectory\Libraries"
 
 	#Test results directories
 	$testResultsDirectory = "$outputDirectory\TestResults"
@@ -90,7 +92,7 @@ task Compile -depends Init `
 	Write-Host "Building solution $SolutionFile"
 
 	Exec {
-		msbuild $SolutionFile "/p:Configuration=$buildConfiguration;Platform=$buildPlatform;OutDir=$temporaryOutputDirectory" | Out-Null
+		msbuild $SolutionFile "/p:Configuration=$buildConfiguration;Platform=$buildPlatform;OutDir=$temporaryOutputDirectory;NuGetExePath=$NugetExe"
 	}
 }
 
@@ -124,7 +126,7 @@ task Test -depends Compile, TestNUnit `
 	if(Test-Path $testCoverageReportPath) 
 	{
 		#Generate HTML test coverage report
-		Write-Host "`r`nGenerating HTML test coverage report"
+		Write-Host "Generating HTML test coverage report"
 
 		Exec { &$ReportGeneratorExe $testCoverageReportPath $testCoverageDirectory }
 
@@ -163,7 +165,7 @@ task Test -depends Compile, TestNUnit `
 
 task Package -depends Compile, Test `
 			 -description 'Package applications' `
-			 -requiredVariables publishedWebsitesDirectory, publishedApplicationsDirectory, applicationsOutputDirectory `
+			 -requiredVariables publishedWebsitesDirectory, publishedApplicationsDirectory, applicationsOutputDirectory, publishedLibrariesDirectory, librariesOutputDirectory `
 {
 	$applications = @(Get-ChildItem $publishedWebsitesDirectory) + @(Get-ChildItem $publishedApplicationsDirectory)
 
@@ -175,7 +177,6 @@ task Package -depends Compile, Test `
 	foreach($application in $applications) 
 	{
 		$nuspecPath = "$($application.FullName)\bin\$($application.Name).nuspec"
-		Write-Host "nuspec file: $nuspecPath"
 
 		if(Test-Path $nuspecPath)
 		{
@@ -201,7 +202,7 @@ task Package -depends Compile, Test `
 		}
 		else
 		{
-			Write-Host "`r`nPackaging $($application.Name) as a zip file"
+			Write-Host "Packaging $($application.Name) as a zip file"
 
 			$archivePath = "$applicationsOutputDirectory\$($application.Name).zip"
 			$inputDirectory = "$($application.FullName)\*"
@@ -209,9 +210,28 @@ task Package -depends Compile, Test `
 			Exec { &$7ZipExe a -r -mx3 $archivePath $inputDirectory }
 		}
 	}
+
+	if(Test-Path $publishedLibrariesDirectory)
+	{
+		if(!(Test-Path $librariesOutputDirectory))
+		{
+			mkdir $librariesOutputDirectory | Out-Null
+		}
+
+		Get-ChildItem -Path $publishedLibrariesDirectory -Filter "*.nupkg" -Recurse | Move-Item -Destination $librariesOutputDirectory
+	}
 }
 
 
-task Clean -description 'Remove temporary files' {
+task Clean -depends Compile, Test, Package `
+		   -description 'Remove temporary files' `
+		   -requiredVariables temporaryOutputDirectory `
+{
+	if(Test-Path $temporaryOutputDirectory)
+	{
+		Write-Host "Removing temp directory located at $temporaryOutputDirectory"
+		Remove-Item $temporaryOutputDirectory -Force -Recurse
+	}
+
 	Write-Host "Cleaned!"
 }

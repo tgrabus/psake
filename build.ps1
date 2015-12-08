@@ -13,7 +13,7 @@ Remove-Module [p]sake
 Import-Module .\packages\psake.*\tools\psake.psm1
 
 Invoke-psake -buildFile .\Build\default.ps1 `
-			 -taskList Package `
+			 -taskList Clean `
 			 -framework 4.6 `
 			 -properties @{ 
 				 "buildConfiguration" = "Release"
