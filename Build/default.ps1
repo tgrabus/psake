@@ -8,6 +8,7 @@ properties {
 	#Project's output directories
 	$temporaryOutputDirectory = "$outputDirectory\temp"
 	$publishedNUnitTestsDirectory = "$temporaryOutputDirectory\_PublishedNUnitTests"
+	$publishedXUnitTestsDirectory = "$temporaryOutputDirectory\_PublishedXUnitTests"
 	$publishedApplicationsDirectory = "$temporaryOutputDirectory\_PublishedApplications"
 	$publishedWebsitesDirectory = "$temporaryOutputDirectory\_PublishedWebsites"
 	$publishedLibrariesDirectory = "$temporaryOutputDirectory\_PublishedLibraries"
@@ -19,17 +20,19 @@ properties {
 	#Test results directories
 	$testResultsDirectory = "$outputDirectory\TestResults"
 	$NUnitTestResultsDirectory = "$testResultsDirectory\NUnit"
+	$XUnitTestResultsDirectory = "$testResultsDirectory\XUnit"
 	
 	#Test coverage directory and default configuration
 	$testCoverageDirectory = "$outputDirectory\TestCoverage"
 	$testCoverageReportPath = "$testCoverageDirectory\OpenCover.xml"
-	$testCoverageFilter = "+[*]* -[*.NUnitTests]* -[*.Tests]*"
+	$testCoverageFilter = "`"`"+[*]* -[xunit.*]* -[*.Tests]* -[FakeItEasy]* -[FluentAssertions*]*`"`""
 	$testCoverageExcludeByAttribute = "System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute"
 	$testCoverageExcludeByFile = "*\*Designer.cs;*\*.g.cs;*\*.g.i.cs"
 
 	#Tools
 	$packagesPath = "$solutionDirectory\packages"
 	$NUnitExe = (Find-PackagePath $packagesPath "NUnit.Console") + "\tools\nunit3-console.exe"
+	$XUnitExe = (Find-PackagePath $packagesPath "xunit.runner.console") + "\tools\xunit.console.exe"
 	$OpenCoverExe = (Find-PackagePath $packagesPath "OpenCover") + "\tools\OpenCover.Console.exe"
 	$ReportGeneratorExe = (Find-PackagePath $packagesPath "ReportGenerator") + "\tools\ReportGenerator.exe"
 	$7ZipExe = (Find-PackagePath $packagesPath "7-Zip.CommandLine") + "\tools\7za.exe"
@@ -59,6 +62,9 @@ task Init -description 'Init thee build by removing previous artifacts and creat
 
 	Assert -conditionToCheck (Test-Path $NUnitExe) `
 		   -failureMessage "NUnit Exe could not be found at $NUnitExe"
+
+	Assert -conditionToCheck (Test-Path $XUnitExe) `
+		   -failureMessage "XUnit Exe could not be found at $XUnitExe"
 
 	Assert -conditionToCheck (Test-Path $OpenCoverExe) `
 		   -failureMessage "OpenCover Exe could not be found at $OpenCoverExe"
@@ -119,7 +125,29 @@ task TestNUnit -depends Compile `
 
 }
 
-task Test -depends Compile, TestNUnit `
+task TestXUnit -depends Compile `
+			   -description 'Run XUnit tests' `
+			   -precondition { return Test-Path  $publishedXUnitTestsDirectory } `
+{
+	$testAssemblies = Prepare-Tests -testRunnerName:"XUnit" `
+									-publishedTestDirectory:$publishedXUnitTestsDirectory `
+									-testResultsDirectory:$XUnitTestResultsDirectory `
+									-testCoverageDirectory:$testCoverageDirectory
+
+	Write-Host "Test assemblies: $testAssemblies"
+
+	$targetArgs = "$testAssemblies -xml `"`"$XUnitTestResultsDirectory\xUnit.xml`"`" -nologo -noshadow"
+
+	Run-Tests -openCoverExe:$OpenCoverExe `
+			  -targetExe:$XUnitExe `
+			  -targetArgs:$targetArgs `
+			  -coveragePath:$testCoverageReportPath `
+			  -filter:$testCoverageFilter `
+			  -excludeByAttribute:$testCoverageExcludeByAttribute `
+			  -excludeByFile:$testCoverageExcludeByFile
+}
+
+task Test -depends Compile, TestNUnit, TestXUnit `
 		  -description 'Run unit tests' `
 {
 
@@ -176,7 +204,7 @@ task Package -depends Compile, Test `
 
 	foreach($application in $applications) 
 	{
-		$nuspecPath = "$($application.FullName)\bin\$($application.Name).nuspec"
+		$nuspecPath = "$($application.FullName)\$($application.Name).nuspec"
 
 		if(Test-Path $nuspecPath)
 		{

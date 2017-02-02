@@ -47,7 +47,7 @@ function Prepare-Tests
 
 	#Get the list of test DLLs
 	$testAssembliesPath = $projects | ForEach-Object { 
-		"`"`"" + $_.FullName + "\bin\" + $_.Name + ".dll`"`""
+		"`"`"" + $_.FullName + "\" + $_.Name + ".dll`"`""
 	}
 
 	$testAssemblies = [string]::Join(" ", $testAssembliesPath)
@@ -73,7 +73,7 @@ function Run-Tests
 	Exec { &$openCoverExe -target:$targetExe `
 						  -targetargs:$targetArgs `
 						  -output:$coveragePath `
-						  -register `
+						  -register:user `
 						  -filter:$filter `
 						  -excludebyattribute:$excludeByAttribute `
 						  -excludebyfile:$excludeByFile `
